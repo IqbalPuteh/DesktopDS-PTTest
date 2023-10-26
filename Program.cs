@@ -7,6 +7,7 @@ using FlaUI.Core.AutomationElements;
 using System.Runtime.InteropServices;
 using System.Threading;
 using System.CodeDom;
+using Windows.Devices.HumanInterfaceDevice;
 
 namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
 {
@@ -116,13 +117,31 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 Thread.Sleep(60000);
 
                 /* Try to navigare and open 'Sales' report */
-                if (!OpenReport01())
+                if (!OpenReport01("sales"))
                 {
                     Console.WriteLine("Application Automation failed !!");
                     return;
                 }
                 /* Download opened report on screen */
-                if (!DownloadReport())
+                if (!DownloadReport("sales"))
+                {
+                    Console.WriteLine("Application Automation failed !!");
+                    return;
+                }
+                /* Closing Workspaces that contain all report tab */
+                if (!ClosingWorkspace())
+                {
+                    Console.WriteLine("Application Automation failed !!");
+                    return;
+                }
+                /* Try to navigare and open 'Sales' report */
+                if (!OpenReport01("ar"))
+                {
+                    Console.WriteLine("Application Automation failed !!");
+                    return;
+                }
+                /* Download opened report on screen */
+                if (!DownloadReport("ar"))
                 {
                     Console.WriteLine("Application Automation failed !!");
                     return;
@@ -144,8 +163,8 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 { automationUIA3 = null; }
                 {
 
-                }
             }
+        }
         }
 
 
@@ -157,7 +176,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 var eleMain = window.FindFirstDescendant(cf => cf.ByName("ACCURATE 4", FlaUI.Core.Definitions.PropertyConditionFlags.MatchSubstring));
                 if (eleMain is null)
                 {
-                    Console.WriteLine($"[Step #[1] Quitting, end of ClosingWorkspace automation function !!");
+                    Console.WriteLine($"[Step #1 Quitting, end of ClosingWorkspace automation function !!");
                     return false;
                 }
                 eleMain.SetForeground();
@@ -166,7 +185,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 var ele = WaitForElement(() => window.FindFirstDescendant(cr => cr.ByClassName("TsuiSkinMenuBar")));
                 if (ele is null)
                 {
-                    Console.WriteLine($"[Step #{step += 1}] Quitting, end of OpenApp automation function !!");
+                    Console.WriteLine($"[Step #2 Quitting, end of OpenApp automation function !!");
                     return false;
                 }
                 Console.WriteLine(ele.Properties.ClassName.ToString());
@@ -317,14 +336,14 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
             }
         }
 
-        static bool OpenReport01()
+        static bool OpenReport01(string rptType)
         {
             try
             {
                 var ele1 = WaitForElement(() => window.FindFirstDescendant(cf => cf.ByName("ACCURATE 4", FlaUI.Core.Definitions.PropertyConditionFlags.MatchSubstring)));
                 if (ele1 is null)
                 {
-                    Console.WriteLine($"[Step #[{step += 1}] Quitting, end of DownloadReport automation function !!");
+                    Console.WriteLine($"[Step #1 Quitting, end of OpenReport01\\{rptType} automation function !!");
                     return false;
                 }
                 Console.WriteLine("Class name is {0}", ele1.Properties.ClassName.ToString());
@@ -335,7 +354,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 var ele = ele1.FindFirstDescendant(cr => cr.ByClassName("TsuiSkinMenuBar"));
                 if (ele is null)
                 {
-                    Console.WriteLine($"[Step #{step += 1}] Quitting, end of OpenReport01 automation function !!");
+                    Console.WriteLine($"[Step #2] Quitting, end of OpenReport01\\{rptType} automation function !!");
                     return false;
                 }
                 Console.WriteLine(ele.Properties.ClassName.ToString());
@@ -350,41 +369,71 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 Thread.Sleep(1000);
 
                 /* Travesing to 'Index to Reports' */
-                window = automationUIA3.GetDesktop();
+                //window = automationUIA3.GetDesktop();
                 var eleParent = WaitForElement(() => window.FindFirstDescendant(cr => cr.ByName("Index to Reports")));
                 if (eleParent is null)
                 {
-                    Console.WriteLine($"[Step #{step += 1}] Quitting, end of OpenReport01 automation function !!");
+                    Console.WriteLine($"[Step #3] Quitting, end of OpenReport0\\{rptType}1 automation function !!");
                     return false;
                 }
                 Console.WriteLine("Class name is {0}", eleParent.Properties.ClassName.ToString());
                 Thread.Sleep(1000);
 
-                //Sales Reports
-                ele = eleParent.FindFirstDescendant(cf => cf.ByName("Sales Reports"));
-                if (ele is null)
+                if (rptType == "sales")
                 {
-                    Console.WriteLine($"[Step #{step += 1}] Quitting, end of OpenReport01 automation function !!");
-                    return false;
-                }
-                ele.Click();
-                Thread.Sleep(500);
+                    //Sales Reports
+                    ele = eleParent.FindFirstDescendant(cf => cf.ByName("Sales Reports"));
+                    if (ele is null)
+                    {
+                        Console.WriteLine($"[Step #4] Quitting, end of OpenReport01\\{rptType} automation function !!");
+                        return false;
+                    }
+                    ele.Click();
+                    Thread.Sleep(500);
 
-                //Sales By Customer Detail
-                ele = eleParent.FindFirstDescendant(cf => cf.ByName("Sales By Customer Detail"));
-                if (ele is null)
-                {
-                    Console.WriteLine($"[Step #{step += 1}] Quitting, end of OpenReport01 automation function !!"); ;
-                    return false;
+                    //Sales By Customer Detail
+                    ele = eleParent.FindFirstDescendant(cf => cf.ByName("Sales By Customer Detail"));
+                    if (ele is null)
+                    {
+                        Console.WriteLine($"[Step #5] Quitting, end of OpenReport01\\{rptType} automation function !!"); ;
+                        return false;
+                    }
+                    ele.DoubleClick();
+                    Thread.Sleep(3000);
+
+
                 }
-                ele.DoubleClick();
-                Thread.Sleep(3000);
+
+                
+
+                if (rptType == "ar")
+                {
+                    //Account Receivables & Customers
+                    ele = eleParent.FindFirstDescendant(cf => cf.ByName("Account Receivables & Customers"));
+                    if (ele is null)
+                    {
+                        Console.WriteLine($"[Step #9] Quitting, end of OpenReport01\\{ rptType } automation function !!");
+                        return false;
+                    }
+                    ele.Click();
+                    Thread.Sleep(500);
+
+                    //Invoices Paid Summary
+                    ele = eleParent.FindFirstDescendant(cf => cf.ByName("Invoices Paid Summary"));
+                    if (ele is null)
+                    {
+                        Console.WriteLine($"[Step #10] Quitting, end of OpenReport01\\{rptType} automation function !!"); ;
+                        return false;
+                    }
+                    ele.DoubleClick();
+                    Thread.Sleep(3000);
+                }
 
                 //Report Format
                 eleParent = WaitForElement(() => window.FindFirstDescendant(cr => cr.ByName("Report Format")).AsWindow());
                 if (eleParent is null)
                 {
-                    Console.WriteLine($"[Step #{step += 1}] Quitting, end of OpenReport01 automation function !!");
+                    Console.WriteLine($"[Step #6] Quitting, end of OpenReport01\\{rptType} automation function !!");
                     return false;
                 }
                 Console.WriteLine(eleParent.Properties.ClassName.ToString());
@@ -393,9 +442,10 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
 
                 //  Filters && Parameters => Under 'Desktop' windows
                 ele = eleParent.FindFirstDescendant(cf => cf.ByName("Filters && Parameters", FlaUI.Core.Definitions.PropertyConditionFlags.MatchSubstring));
+                //ele = WaitForElement(() => window.FindFirstDescendant(cr => cr.ByName("Filters && Parameters", FlaUI.Core.Definitions.PropertyConditionFlags.MatchSubstring)));
                 if (ele is null)
                 {
-                    Console.WriteLine($"[Step #{step += 1}] Quitting, end of OpenReport01 automation function !!");
+                    Console.WriteLine($"[Step #7] Quitting, end of OpenReport01\\{rptType} automation function !!");
                     return false;
                 }
                 Console.WriteLine(ele.Properties.ClassName.ToString());
@@ -406,7 +456,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 ele = ele.FindFirstDescendant(cr => cf.ByName("TabDateFromTo"));
                 if (ele is null)
                 {
-                    Console.WriteLine($"[Step #{step += 1}] Quitting, end of OpenReport01 automation function !!");
+                    Console.WriteLine($"[Step #8] Quitting, end of OpenReport01\\{rptType} automation function !!");
                     return false;
                 }
                 ele.Focus();
@@ -425,7 +475,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                         }
                         else
                         {
-                            SendingDate(ArrEle[index],  "31/12/2023");
+                            SendingDate(ArrEle[index], "31/12/2023");
                         }
                     }
                 }
@@ -436,13 +486,13 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
             }
             catch (Exception ex)
             {
-                Console.WriteLine("[Exception] Quitting, end of OpenReport01 automation function !!");
+                Console.WriteLine($"[Exception] Quitting, end of OpenReport01\\{rptType} automation function !!");
                 throw ex;
             }
 
         }
 
-        static bool DownloadReport()
+        static bool DownloadReport(string reportName)
         {
             try
             {
@@ -451,7 +501,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 var ele1 = window.FindFirstDescendant(cf => cf.ByName("ACCURATE 4", FlaUI.Core.Definitions.PropertyConditionFlags.MatchSubstring));
                 if (ele1 is null)
                 {
-                    Console.WriteLine($"[Step #[1] Quitting, end of DownloadReport automation function !!");
+                    Console.WriteLine($"[Step #1 Quitting, end of DownloadReport automation function !!");
                     return false;
                 }
                 Console.WriteLine("Class name is {0}", ele1.Properties.ClassName.ToString());
@@ -460,7 +510,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 var ele = ele1.FindFirstDescendant(cf => cf.ByName("PriviewToolBar"));
                 if (ele1 is null)
                 {
-                    Console.WriteLine($"[Step #[2] Quiting, end of DownloadReport automation function !!");
+                    Console.WriteLine($"[Step #2 Quiting, end of DownloadReport automation function !!");
                     return false;
                 }
                 Console.WriteLine("Class name is {0}", ele.Properties.ClassName.ToString());
@@ -470,19 +520,20 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 Thread.Sleep(1000);
 
 
-                /* No the export button action resulting new window opened */
+                /* The export button action resulting new window opened */
                 ele1 = window.FindFirstDescendant(cf => cf.ByName("Export to Excel"));
                 if (ele1 is null)
                 {
-                    Console.WriteLine($"[Step #[3] Quitting, end of DownloadReport automation function !!");
+                    Console.WriteLine($"[Step #3 Quitting, end of DownloadReport automation function !!");
                     return false;
                 }
                 /* Put here the code for iteration of report parameter check box */
                 /* End of codes */
 
+                /* Clicking OK button  */
                 ele1.FindFirstChild(cf => cf.ByName("OK")).AsButton().Click();
 
-                if (!SavingFileDialog("Sales By Customer Detail"))
+                if (!SavingFileDialog(reportName))
                 { return false; }
 
                 return true;
@@ -508,7 +559,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
             Thread.Sleep(500);
 
             /* Delete all excel files in temp folder */
-            DeleteExcelFiles(@"C:\temp");
+                DeleteExcelFiles(@"C:\temp");
 
             System.Windows.Forms.SendKeys.SendWait($@"C:\temp\{reportName}.xls");
             Thread.Sleep(500);
@@ -533,7 +584,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
 
             if (ele is null)
             {
-                Console.WriteLine($"[Step #{step += 1}] Quitting, end of SendingDate automation function !!");
+                Console.WriteLine($"[Step #1] Quitting, end of SendingDate automation function !!");
                 return false;
             }
 
@@ -547,7 +598,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
             var childEle = ele.FindFirstDescendant(cf => cf.ByClassName("TWinControl"));
             if (childEle is null)
             {
-                Console.WriteLine($"[Step #{step += 1}] Quitting, end of OpenReport01 automation function !!");
+                Console.WriteLine($"[Step #2] Quitting, end of OpenReport01 automation function !!");
                 return false;
             }
 
