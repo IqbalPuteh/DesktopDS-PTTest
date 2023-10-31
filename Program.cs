@@ -8,7 +8,9 @@ using Serilog;
 using System.Threading;
 using System.Configuration;
 using System.Runtime.InteropServices;
-
+using System.IO.Compression;
+using System.Diagnostics.Eventing.Reader;
+using System.Windows.Documents;
 
 namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
 {
@@ -24,14 +26,18 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
         static string dtName = ConfigurationManager.AppSettings["dtName"];
         static string LoginId = ConfigurationManager.AppSettings["loginId"];
         static string LoginPassword = ConfigurationManager.AppSettings["password"];
-        static string logfilename = ConfigurationManager.AppSettings["logfilename"];
+        static string enableconsolelog = ConfigurationManager.AppSettings["enableconsolelog"].ToUpper();
+        static string issandbox = ConfigurationManager.AppSettings["uploadtosandbox"].ToUpper();
+        static string DBpath = ConfigurationManager.AppSettings["DBaddresspath"].ToUpper();
         static string appfolder = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile) + @"\Downloads\" + ConfigurationManager.AppSettings["appfolder"];
         static string uploadfolder = appfolder + @"\" + ConfigurationManager.AppSettings["uploadfolder"];
         static string sharingfolder = appfolder + @"\" + ConfigurationManager.AppSettings["sharingfolder"];
-        //static string enableconsolelog = appfolder + @"\" + ConfigurationManager.AppSettings["enableconsolelog"].ToUpper();
         //static string screenshotfolder = appfolder + @"\" + ConfigurationManager.AppSettings["screenshotfolder"];
+        static string logfilename = "";
 
-
+        const int EXCELfile = 0;
+        const int LOGFile = 1;
+        const int ZIPFile = 2;
         const UInt32 WM_CLOSE = 0x0010;
 
         [DllImport("user32.dll", SetLastError = true)]
@@ -69,6 +75,10 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
         {
             try
             {
+                DeleteSupportingFiles(appfolder, EXCELfile);
+                DeleteSupportingFiles(appfolder, LOGFile);
+                DeleteSupportingFiles(appfolder, ZIPFile);
+
                 if (!Directory.Exists(appfolder))
                 {
                     Directory.CreateDirectory(appfolder);
@@ -76,16 +86,18 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Directory.CreateDirectory(sharingfolder);
                 }
                 var config = new LoggerConfiguration();
-                config.WriteTo.Console();
-                config.WriteTo.File(appfolder + logfilename);
+                if (enableconsolelog == "Y")
+                {
+                    config.WriteTo.Console();
+                }
+                logfilename = "DEBUG-" + dtID + "-" + dtName + ".log";
+                config.WriteTo.File(appfolder + Path.DirectorySeparatorChar + logfilename);
                 Log.Logger = config.CreateLogger();
-
-                DeleteExcelFiles(uploadfolder);
 
                 Log.Information("Accurate Desktop ver.4 Automation -  by FAIRBANC");
 
 
-                if (!OpenAppAndDB())
+                if (!OpenDB())
                 {
                     Log.Information("application automation failed !!");
                     return;
@@ -134,6 +146,12 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information("Application Automation failed !!");
                     return;
                 }
+                if (!CloseApp())
+                {
+                    Log.Information("Application Automation failed !!");
+                    return;
+                }
+                ZipAndSendFile();
             }
             catch (Exception ex)
             {
@@ -141,11 +159,14 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
             }
             finally
             {
+                Log.Information("Accurate Desktop ver.4 Automation - SELESAI");
                 if (automationUIA3 != null)
                 { 
                     automationUIA3.Dispose();
                 }
                  Log.CloseAndFlush();
+
+                Task.Run(() => System.Windows.MessageBox.Show("Tejadi kesalahan, sliahkan tutup applikasi !!!"));
             }
         }
 
@@ -160,38 +181,64 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information($"[Step #1 Quitting, end of ClosingWorkspace automation function !!");
                     return false;
                 }
+                Log.Information("Element Interaction on property named -> " + eleMain.Properties.Name.ToString());
                 eleMain.SetForeground();
                 Thread.Sleep(1000);
 
                 var ele = WaitForElement(() => window.FindFirstDescendant(cr => cr.ByClassName("TsuiSkinMenuBar")));
                 if (ele is null)
                 {
-                    Log.Information($"[Step #2 Quitting, end of OpenApp automation function !!");
+                    Log.Information($"[Step #2 Quitting, end of ClosingWorkspace automation function !!");
                     return false;
                 }
-                Log.Information(ele.Properties.ClassName.ToString());
-                ele.SetForeground();
-                Log.Information(ele.Properties.ClassName.ToString());
+                Log.Information("Element Interaction on property with class named -> " + ele.Properties.ClassName.ToString());
+                //ele.SetForeground();
                 ele.Focus();
                 Thread.Sleep(1000);
 
-                System.Windows.Forms.SendKeys.SendWait("%o");
-                Log.Information("Sending keys 'ALT+o'...");
+                ele = WaitForElement(() => ele.FindFirstDescendant(cr => cr.ByName("Windows")));
+                if (ele is null)
+                {
+                    Log.Information($"[Step #3] Quitting, end of ClosingWorkspace automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named -> " + ele.Properties.Name.ToString());
+                ele.Click();
+                //System.Windows.Forms.SendKeys.SendWait("%o");
+                //Log.Information("Sending keys 'ALT+o'...");
                 Thread.Sleep(1000);
 
-                System.Windows.Forms.SendKeys.SendWait("A");
-                Log.Information("Then sending key 'a'...");
+                // Context
+                ele = WaitForElement(() => window.FindFirstDescendant(cr => cr.ByName("Context")));
+                if (ele is null)
+                {
+                    Log.Information("[Step #4] Quitting, end of ClosingWorkspace automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named -> " + ele.Properties.Name.ToString());
+
+                ele = ele.FindAllDescendants((cr => cr.ByControlType(FlaUI.Core.Definitions.ControlType.MenuItem))).ElementAt(1);
+                if (ele is null)
+                {
+                    Log.Information("[Step #5] Quitting, end of ClosingWorkspace automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named 'Context' with Child id# -> " + ele.Properties.AutomationId.ToString());
+                ele.Click();
+                //System.Windows.Forms.SendKeys.SendWait("A");
+                //Log.Information("Then sending key 'a'...");
                 Thread.Sleep(1000);
 
                 return true;
             }
             catch (Exception ex)
             {
-                throw ex;
+                Log.Information(ex.ToString());
+                return false;
             }
         }
 
-        static bool OpenAppAndDB()
+        static bool OpenDB()
         {
             try
             {
@@ -207,27 +254,30 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 Thread.Sleep(1500);
 
                 /* Closing Warning diaLog box */
-                var ele3 = WaitForElement(() => window.FindFirstChild(cr => cr.ByName("Warning")));
-                if (ele3 is null)
-                {
-                    Log.Information($"[Step #1] Quitting, end of OpenApp automation function !!");
-                    return false;
-                }
-                ele3.FindFirstChild(cf => cf.ByName("OK")).AsButton().Click();
-
-                var ele = WaitForElement(() => window.FindFirstDescendant(cr => cr.ByClassName("TsuiSkinMenuBar")));
+                var ele = WaitForElement(() => window.FindFirstChild(cr => cr.ByName("Warning")));
                 if (ele is null)
                 {
-                    Log.Information($"[Step #2] Quitting, end of OpenApp automation function !!");
+                    Log.Information($"[Step #1] Quitting, end of OpenDB automation function !!");
                     return false;
                 }
-                Log.Information("Element Interaction on property named -> " + ele.Properties.ClassName.ToString());
+                Log.Information("Element Interaction on property class named -> " + ele.Properties.ClassName.ToString());
+
+                ele.FindFirstChild(cf => cf.ByName("OK")).AsButton().Click();
+                Log.Information("Clicking 'OK' button...");
+
+                ele = WaitForElement(() => window.FindFirstDescendant(cr => cr.ByClassName("TsuiSkinMenuBar")));
+                if (ele is null)
+                {
+                    Log.Information($"[Step #2] Quitting, end of OpenDB automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property class named -> " + ele.Properties.ClassName.ToString());
                 ele.SetForeground();
 
                 ele = WaitForElement(() => ele.FindFirstDescendant(cr => cr.ByName("File")));
                 if (ele is null)
                 {
-                    Log.Information($"[Step #3] Quitting, end of OpenApp automation function !!");
+                    Log.Information($"[Step #3] Quitting, end of OpenDB automation function !!");
                     return false;
                 }
                 Log.Information("Element Interaction on property named -> " + ele.Properties.Name.ToString());
@@ -237,7 +287,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 ele = WaitForElement(() => window.FindFirstDescendant(cr => cr.ByName("Context")));
                 if (ele is null)
                 {
-                    Log.Information("[Step #4] Quitting, end of OpenApp automation function !!");
+                    Log.Information("[Step #4] Quitting, end of OpenDB automation function !!");
                     return false;
                 }
                 Log.Information("Element Interaction on property named -> " + ele.Properties.Name.ToString());
@@ -248,10 +298,10 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 ele = ele.FindAllDescendants((cr => cr.ByControlType(FlaUI.Core.Definitions.ControlType.MenuItem))).ElementAt(1);
                 if (ele is null)
                 {
-                    Log.Information("[Step #5] Quitting, end of OpenApp automation function !!");
+                    Log.Information("[Step #5] Quitting, end of OpenDB automation function !!");
                     return false;
                 }
-                Log.Information("Element Interaction on property named 'Context' with id -> " + ele.Properties.AutomationId.ToString());
+                Log.Information("Element Interaction on property named 'Context' with Child id# -> " + ele.Properties.AutomationId.ToString());
                 ele.Click();
                 //System.Windows.Forms.SendKeys.SendWait("o");
                 //Log.Information("Then sending key 'o'...");
@@ -261,38 +311,40 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 ele = WaitForElement(() => window.FindFirstChild(cr => cr.ByName("Open Database")));
                 if (ele is null)
                 {
-                    Log.Information($"[Step #6 Quitting, end of OpenApp automation function !!");
+                    Log.Information($"[Step #6 Quitting, end of OpenDB automation function !!");
                     return false;
                 }
+                Log.Information("Element Interaction on property named -> " + ele.Properties.Name.ToString());
                 ele.Focus();
 
                 var ele2 = WaitForElement(() => ele.FindFirstChild(cr => cr.ByClassName("TEdit")));
                 if (ele2 is null)
                 {
-                    Log.Information($"[Step #7 Quitting, end of OpenApp automation function !!");
+                    Log.Information($"[Step #7 Quitting, end of OpenDB automation function !!");
                     return false;
                 }
-                ele2.AsTextBox().Enter("C");
-                if (ele2.AsTextBox().Text != @"C:\Program Files (x86)\CPSSoft\ACCURATE4 Enterprise\Sample\Sample.GDB")
+                Log.Information("Element Interaction on property class named -> " + ele2.Properties.ClassName.ToString());
+                
+                //ele2.AsTextBox().Enter("C");
+
+                if (ele2.AsTextBox().Text != $@"{DBpath}")
                 {
                     ///System.Windows.Forms.SendKeys.Send("{BACKSPACE}");
-                    ele2.AsTextBox().Enter("\b \b");
-                    ele2.AsTextBox().Enter(@"C:\Program Files (x86)\CPSSoft\ACCURATE4 Enterprise\Sample\Sample.GDB");
+                    //ele2.AsTextBox().Enter("\b \b");
+                    Thread.Sleep(1000);
+                    ele2.AsTextBox().Text = $@"{DBpath}";
+                    //System.Windows.MessageBox.Show($@"{ele2.AsTextBox().Text}", "debug", System.Windows.MessageBoxButton.OK);
                 }
 
                 ele = ele.FindFirstChild(cf => cf.ByName("OK")).AsButton();
-                if (ele2 is null)
-                {
-                    Log.Information($"[Step #8 Quitting, end of OpenApp automation function !!");
-                    return false;
-                }
+                Log.Information("Clicking 'OK' button...");
                 ele.Click();
 
                 return true;
             }
             catch
             {
-                Log.Information("Quitting, end of OpenApp automation function !!");
+                Log.Information("Quitting, end of DB automation function !!");
                 return false;
             }
         }
@@ -307,15 +359,22 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information($"[Step #{step += 1}] Quitting, end of login automation function !!");
                     return false;
                 }
+                Log.Information("Element Interaction on property named -> " + ele.Properties.Name.ToString());
+
                 var ele2 = ele.FindFirstDescendant(cf => cf.ByClassName("TEdit")).AsTextBox();
                 ele2.Enter(LoginId + "\t");
+                Log.Information("Sending Login Id...");
+                
                 System.Windows.Forms.SendKeys.SendWait(LoginPassword);
+                Log.Information("Sending password...");
+
                 ele.FindFirstDescendant(cf => cf.ByName("OK")).AsButton().Click();
+                Log.Information("Clicking 'OK' button...");
                 return true;
             }
-            catch
+            catch (Exception ex) 
             {
-                Log.Information($"[Step #{step += 1}] Quitting, end of login automation function !!");
+                Log.Information(ex.ToString());
                 return false;
             }
         }
@@ -330,7 +389,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information($"[Step #1 Quitting, end of OpenReport01\\{rptType} automation function !!");
                     return false;
                 }
-                Log.Information("Class name is {0}", ele1.Properties.ClassName.ToString());
+                Log.Information("Element Interaction on property named -> " + ele1.Properties.ClassName.ToString());
                 ele1.SetForeground();
                 Thread.Sleep(500);
 
@@ -483,7 +542,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information($"[Step #1 Quitting, end of DownloadReport automation function !!");
                     return false;
                 }
-                Log.Information("Class name is {0}", ele1.Properties.ClassName.ToString());
+                Log.Information("Element Interaction on property named -> " + ele1.Properties.Name.ToString());
                 Thread.Sleep(500);
 
                 var ele = ele1.FindFirstDescendant(cf => cf.ByName("PriviewToolBar"));
@@ -492,12 +551,11 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information($"[Step #2 Quiting, end of DownloadReport automation function !!");
                     return false;
                 }
-                Log.Information("Class name is {0}", ele.Properties.ClassName.ToString());
+                Log.Information("Element Interaction on property named -> " + ele.Properties.Name.ToString());
 
                 //Export settings
                 ele.FindFirstChild(cf.ByName(("Export"))).AsButton().Click();
                 Thread.Sleep(1000);
-
 
                 /* The export button action resulting new window opened */
                 ele1 = window.FindFirstDescendant(cf => cf.ByName("Export to Excel"));
@@ -506,11 +564,14 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information($"[Step #3 Quitting, end of DownloadReport automation function !!");
                     return false;
                 }
+                Log.Information("Element Interaction on property named -> " + ele1.Properties.Name.ToString());
+
                 /* Put here the code for iteration of report parameter check box */
                 /* End of codes */
 
                 /* Clicking OK button  */
                 ele1.FindFirstChild(cf => cf.ByName("OK")).AsButton().Click();
+                Log.Information("Clicking 'OK' button...");
 
                 if (!SavingFileDialog(reportName))
                 { return false; }
@@ -522,8 +583,6 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
 
         private static bool SavingFileDialog(string reportName)
         {
-            ///window = automationUIA3a.GetDesktop();
-            //Save As
             //var ele1 = window.FindFirstDescendant(cf.ByClassName("#32770"));
             //if (ele1 is null)
             //{
@@ -534,10 +593,24 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
 
             //Edit
             System.Windows.Forms.SendKeys.SendWait("%n");
-            Log.Information("Sending keys 'ALT+n'...");
+            Log.Information("Saving file by sending keys 'ALT+n'...");
             Thread.Sleep(500);
-
-            System.Windows.Forms.SendKeys.SendWait($@"{uploadfolder}\{reportName}.xls");
+            var excelname = "";
+            switch (reportName)
+            {
+                case "sales":
+                    excelname = "Sales_Data";
+                    break;
+                case "ar":
+                    excelname = "Repayment_Data";
+                    break;
+                case "outlet":
+                    excelname = "Master_Outlet";
+                    break;
+                default:
+                    break;
+            }
+            System.Windows.Forms.SendKeys.SendWait($@"{appfolder}\{excelname}.xls");
             Thread.Sleep(500);
 
             //Save
@@ -547,58 +620,83 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 Log.Information($"[Step #2] Quitting, end of OpenReport\\SavingFileDialog automation function !!");
                 return false;
             }
+            Log.Information("Element Interaction on property named -> " + ele.Properties.Name.ToString());
             ele.AsButton().Click();
 
             /* Pause the app to wait file saving is finnished */
-            Thread.Sleep(5000);
+            Thread.Sleep(10000);
 
             return true;
         }
 
         private static bool SendingDate(AutomationElement ele, string date)
         {
-
-            if (ele is null)
+            try
             {
-                Log.Information($"[Step #1] Quitting, end of SendingDate automation function !!");
-                return false;
+                if (ele is null)
+                {
+                    Log.Information($"[Step #1] Quitting, end of SendingDate automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named -> " + ele.Properties.ClassName.ToString());
+                ele.Click();
+
+                // Send date parameter
+                ele.AsTextBox().Enter("\b\b\b\b\b\b\b\b");
+                ele.AsTextBox().Text = date;
+
+                // TWinControl
+                var childEle = ele.FindFirstDescendant(cf => cf.ByClassName("TWinControl"));
+                if (childEle is null)
+                {
+                    Log.Information($"[Step #2] Quitting, end of OpenReport01 automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named -> " + childEle.Properties.ClassName.ToString());
+                childEle.Click();
+                Thread.Sleep(500);
+                childEle.Click();
+
+                Log.Information($"Sending date parameter");
+
+                return true;
             }
-
-            ele.Click();
-
-            // Send date parameter
-            ele.AsTextBox().Enter("\b\b\b\b\b\b\b\b");
-            ele.AsTextBox().Text = date;
-
-            // TWinControl
-            var childEle = ele.FindFirstDescendant(cf => cf.ByClassName("TWinControl"));
-            if (childEle is null)
+            catch (Exception ex)
             {
-                Log.Information($"[Step #2] Quitting, end of OpenReport01 automation function !!");
-                return false;
+                throw ex;
             }
-
-            childEle.Click();
-            Thread.Sleep(500);
-            childEle.Click();
-
-            Log.Information($"Sending date parameter");
-
-            return true;
         }
 
-        private static void DeleteExcelFiles(string FolderName)
+        private static void DeleteSupportingFiles(string FolderName, int fileExtEnum)
         {
-            // Delete Excel files
-            var supportFiles = Directory.EnumerateFiles(FolderName, "*.xl*");
-            foreach (var excelFile in supportFiles)
+            try
             {
-                File.Delete(excelFile);
-                Log.Information($"Deleted Excel file: {excelFile}");
+                // Delete Excel files
+                var fileextpattern = "";
+                switch (fileExtEnum)
+                {
+                    case 0:
+                        fileextpattern = "*.xl*";
+                        break;
+                    case 1:
+                        fileextpattern = "*.log";
+                        break;
+                    case 2:
+                        fileextpattern = "*.zip";
+                        break;
+                }
+                var supportFiles = Directory.EnumerateFiles(FolderName, fileextpattern,SearchOption.AllDirectories);
+                foreach (var excelFile in supportFiles)
+                {
+                    File.Delete(excelFile);
+                    Console.WriteLine($"Deleted Excel file: {excelFile}");
+                }
             }
+            catch (Exception)
+            { throw; }
         }
 
-        static bool OpenReport(string reportType)
+        private static bool OpenReport(string reportType)
         {
             try
             {
@@ -652,19 +750,20 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information("[Step #5] Quitting, end of OpenReport automation function !!");
                     return false;
                 }
-                Log.Information("Element Interaction on property named 'Context' with id -> " + ele.Properties.AutomationId.ToString());
+                Log.Information("Element Interaction on property named 'Context' with Child id# -> " + ele.Properties.AutomationId.ToString());
                 ele.Click();
                 //System.Windows.Forms.SendKeys.SendWait("i");
                 //Log.Information("Then sending key 'I'...");
-                Thread.Sleep(2000);
+                Thread.Sleep(3000);
 
-                var indexToReportsElement = WaitForElement(() => window.FindFirstDescendant(cr => cr.ByName("Index to Reports")));
+                var indexToReportsElement = WaitForElement(() => mainElement.FindFirstDescendant(cr => cr.ByName("Index to Reports")));
                 if (indexToReportsElement == null)
                 {
-                    Log.Information($"[Step #6] Quitting, end of OpenReport OpenReport function.");
+                    Log.Information($"[Step #6] Quitting, end of OpenReport function.");
                     return false;
                 }
-                //indexToReportsElement.Click();
+                Log.Information("Element Interaction on property named -> " + indexToReportsElement.Properties.Name.ToString());
+                indexToReportsElement.Focus();
                 Thread.Sleep(2000);
 
                 var reportMain = (reportType == "sales") ? "Sales Reports" : "Account Receivables & Customers";
@@ -675,6 +774,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information($"[Step #7] Quitting, end of OpenReport automation function.");
                     return false;
                 }
+                Log.Information("Element Interaction on property named -> " + reportElement1.Properties.Name.ToString());
                 reportElement1.Click();
                 Thread.Sleep(1000);
 
@@ -686,6 +786,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information($"[Step #8] Quitting, end of OpenReport automation function.");
                     return false;
                 }
+                Log.Information("Element Interaction on property named -> " + reportElement2.Properties.Name.ToString());
                 reportElement2.DoubleClick();
                 Thread.Sleep(3000);
 
@@ -697,7 +798,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information($"[Step #9] Quitting, end of OpenReport automation function.");
                     return false;
                 }
-
+                Log.Information("Element Interaction on property named -> " + reportFormatElement.Properties.Name.ToString());
                 reportFormatElement.Focus();
                 Thread.Sleep(2000);
 
@@ -709,19 +810,18 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     Log.Information($"[Step #10] Quitting, end of OpenReport automation10unction.");
                     return false;
                 }
-
+                Log.Information("Element Interaction on property named -> " + filtersAndParametersElement.Properties.Name.ToString());
                 filtersAndParametersElement.Focus();
                 Thread.Sleep(500);
 
                 // TabDateFromTo
                 var tabDateFromToElement = filtersAndParametersElement.FindFirstDescendant(cf.ByName("TabDateFromTo"));
-
                 if (tabDateFromToElement == null)
                 {
                     Log.Information($"[Step #11] Quitting, end of OpenReport aut[Step #11] ction.");
                     return false;
                 }
-
+                Log.Information("Element Interaction on property named -> " + tabDateFromToElement.Properties.Name.ToString());
                 tabDateFromToElement.Focus();
 
                 /* Sending Report Date Parameters */
@@ -735,10 +835,12 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                     {
                         if (index != 0)
                         {
+                            var dateparam = GetFirstDate() + "/" + GetPrevMonth() + "/" + GetPrevYear();
                             SendingDate(dateElements[index], "01/01/2000");
                         }
                         else
                         {
+                            var dateparam = GetLastDayOfPrevMonth() + "/" + GetPrevMonth() + "/" + GetPrevYear();
                             SendingDate(dateElements[index], "31/12/2023");
                         }
                     }
@@ -749,8 +851,244 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
             }
             catch (Exception ex)
             {
+                Log.Information(ex.ToString());
+                return false;
+            }
+        }
+
+        private static bool CloseApp()
+        {
+            try
+            {
+                var mainElement = WaitForElement(() => window.FindFirstDescendant(cf.ByName("ACCURATE 4", FlaUI.Core.Definitions.PropertyConditionFlags.MatchSubstring)));
+                if (mainElement is null)
+                {
+                    Log.Information($"[Step #1] Quitting, end of CloseApp automation function.");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named -> " + mainElement.Properties.Name.ToString());
+                mainElement.SetForeground();
+                Thread.Sleep(500);
+
+                var ele = WaitForElement(() => mainElement.FindFirstDescendant(cr => cr.ByClassName("TsuiSkinMenuBar")));
+                if (ele is null)
+                {
+                    Log.Information($"[Step #2] Quitting, end of CloseApp automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named -> " + ele.Properties.ClassName.ToString());
+                ele.SetForeground();
+                Thread.Sleep(500);
+
+                /* Click on Reports menu */
+                ele = WaitForElement(() => mainElement.FindFirstDescendant(cr => cr.ByName("File")));
+                if (ele is null)
+                {
+                    Log.Information($"[Step #3] Quitting, end of CloseApp automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named -> " + ele.Properties.Name.ToString());
+                ele.AsMenu().Focus();
+                ele.AsMenu().Click();
+                Thread.Sleep(1000);
+
+                // Context
+                ele = WaitForElement(() => window.FindFirstDescendant(cr => cr.ByName("Context")));
+                if (ele is null)
+                {
+                    Log.Information("[Step #4] Quitting, end of CloseApp automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named -> " + ele.Properties.Name.ToString());
+                Thread.Sleep(1000);
+
+                // Exit - MenuItem #14
+                ele = ele.FindAllDescendants((cr => cr.ByControlType(FlaUI.Core.Definitions.ControlType.MenuItem))).ElementAt(13);
+                if (ele is null)
+                {
+                    Log.Information("[Step #5] Quitting, end of CloseApp automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named 'Context' with Child id# -> " + ele.Properties.AutomationId.ToString());
+                ele.AsMenuItem().Focus(); 
+                Thread.Sleep(1000); 
+                ele.Click();
+                Thread.Sleep(1000);
+
+                /* The Menu 'File' -> 'Close' clicked action resulting new window opened */
+                var ele1 = window.FindFirstDescendant(cf => cf.ByName("Confirm"));
+                if (ele1 is null)
+                {
+                    Log.Information($"[Step #6 Quitting, end of DownloadReport automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named -> " + ele1.Properties.Name.ToString());
+                Thread.Sleep(1000);
+
+                /* Clicking 'Yes' button  */
+                ele1.FindFirstChild(cf => cf.ByName("Yes")).AsButton().Click();
+                Log.Information("Clicking 'Yes' button...");
+                Thread.Sleep(5000);
+
+                /* The Menu 'Yes' button clicked action resulting new window opened */
+                ele1 = window.FindFirstDescendant(cf => cf.ByName("Confirm"));
+                if (ele1 is null)
+                {
+                    Log.Information($"[Step #7 Quitting, end of DownloadReport automation function !!");
+                    return false;
+                }
+                Log.Information("Element Interaction on property named -> " + ele1.Properties.Name.ToString());
+
+                /* Clicking OK button  */
+                ele1.FindFirstChild(cf => cf.ByName("No")).AsButton().Click();
+                Log.Information("Clicking 'No' button...");
+                Thread.Sleep(1000);
+                return true;
+            }
+            catch (Exception ex)
+            {
                 Log.Information($"Exception: {ex.ToString()}");
                 return false;
+            }
+        }
+
+        // Zip and send files
+        static void ZipAndSendFile()
+        {
+            try
+            {
+                Log.Information("Checking and deleting existing ZIP files...");
+                //CheckAndDeleteZipFile(strDataSharingFolder);
+                var strDsPeriod = GetPrevYear() + GetPrevMonth();
+
+                Log.Information("Moving standart excel reports file to uploaded folder...");
+                // move excels files to Datafolder
+
+                /* var path = strAppDownloadFolder + @"\Master_Outlet.xlsx";
+                var path2 = strUploadFolder + @"\ds-" + strDTid + "-" + strDTname + "-" + strDsPeriod + "_OUTLET.xlsx";
+                File.Move(path, path2, true);
+                */
+
+                var path = appfolder + @"\Sales_Data.xls";
+                var path2 = uploadfolder + @"\ds-" + dtID + "-" + dtName + "-" + strDsPeriod + "_SALES.xlsx";
+                File.Move(path, path2, true);
+                path = appfolder + @"\Repayment_Data.xls";
+                path2 = uploadfolder + @"\ds-" + dtID + "-" + dtName + "-" + strDsPeriod + "_AR.xlsx";
+                File.Move(path, path2, true);
+
+                // set zipping name for files
+                Log.Information("Zipping Transaction file(s)");
+                var strZipFile = dtID + "-" + dtName + "_" + strDsPeriod + ".zip";
+                ZipFile.CreateFromDirectory(uploadfolder, sharingfolder + Path.DirectorySeparatorChar + strZipFile);
+
+                // Send the ZIP file to the API server 
+                Log.Information("Sending ZIP file to the API server...");
+                var strStatusCode = "0"; // varible for debugging Curl test
+                strStatusCode = SendReq(sharingfolder + Path.DirectorySeparatorChar + strZipFile, issandbox, "Y");
+                Thread.Sleep(5000);
+                if (strStatusCode == "200")
+                {
+                    Log.Information("DATA TRANSACTION SHARING - SELESAI");
+                }
+                else
+                {
+                    Log.Information("DATA TRANSACTION SHARING - ERROR, cUrl STATUS CODE :" + strStatusCode);
+                }
+
+                // Send Log file to the API server 
+                Log.Information("Sending log file to the API server...");
+                strStatusCode = SendReq(appfolder + Path.DirectorySeparatorChar + logfilename, issandbox, "Y");
+                Thread.Sleep(5000);
+            }
+            catch (Exception ex)
+            {
+                // Log any exceptions that occur during file operations
+                Log.Information($"Error during ZIP and send: {ex.Message}");
+                throw ex;
+            }
+        }
+
+        private static string SendReq(string strFileDataInfo, string strSandboxBool, string SecureHTTP)
+        {
+            try
+            {
+                string text = "";
+                string text2 = "";
+                if (strSandboxBool == "Y")
+                {
+                    text2 = "KQtbMk32csiJvm8XDAx2KnRAdbtP3YVAnJpF8R5cb2bcBr8boT3dTvGc23c6fqk2NknbxpdarsdF3M4V";
+                    text = ((!(SecureHTTP == "Y")) ? "http://sandbox.fairbanc.app/api/documents" : "https://sandbox.fairbanc.app/api/documents");
+                }
+                else
+                {
+                    text2 = "2S0VtpYzETxDrL6WClmxXXnOcCkNbR5nUCCLak6EHmbPbSSsJiTFTPNZrXKk2S0VtpYzETxDrL6WClmx";
+                    text = ((!(SecureHTTP == "Y")) ? "http://dashboard.fairbanc.app/api/documents" : "https://dashboard.fairbanc.app/api/documents");
+                }
+
+                Log.Information("Preparing to send a request to the API server...");
+                HttpClient httpClient = new HttpClient();
+                HttpRequestMessage httpRequestMessage = new HttpRequestMessage(HttpMethod.Post, text);
+                MultipartFormDataContent multipartFormDataContent = new MultipartFormDataContent();
+                multipartFormDataContent.Add(new StringContent(text2), "api_token");
+                multipartFormDataContent.Add(new ByteArrayContent(File.ReadAllBytes(strFileDataInfo)), "file", Path.GetFileName(strFileDataInfo));
+                httpRequestMessage.Content = multipartFormDataContent;
+                HttpResponseMessage httpResponseMessage = httpClient.Send(httpRequestMessage);
+                Thread.Sleep(5000);
+                httpResponseMessage.EnsureSuccessStatusCode();
+                var strResponseBody = httpResponseMessage.ToString();
+                string[] array = strResponseBody.Split(':', ',');
+                Log.Information($"Response from API server: {array[1].Trim()}");
+                return array[1].Trim();
+            }
+            catch (Exception ex)
+            {
+                // Log any exceptions that occur during the API request
+                Log.Information($"Error during API request: {ex.Message}");
+                return "-1";
+            }
+        }
+
+        static string GetPrevMonth()
+        {
+            return DateTime.Now.AddMonths(-1).ToString("MM");
+        }
+
+        static string GetPrevYear()
+        {
+            return DateTime.Now.AddMonths(-1).ToString("yyyy");
+        }
+
+        static string GetDSPeriod()
+        {
+            return GetPrevYear() + GetPrevMonth();
+        }
+
+        static string GetFirstDate()
+        {
+            return "01";
+        }
+
+        static string GetLastDayOfPrevMonth()
+        {
+            var lastDay = new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1).AddDays(-1);
+            return lastDay.ToString("dd");
+        }
+
+        static void CheckAndDeleteZipFile(string folder)
+        {
+            try
+            {
+                var pattern = "*.zip";
+                var zipFiles = Directory.EnumerateFiles(folder, pattern);
+                foreach (var zipFile in zipFiles)
+                {
+                    File.Delete(zipFile);
+                    Log.Information($"Deleted ZIP file(s): {zipFile}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Information($"Error during ZIP file deletion: {ex.Message}");
             }
         }
 
