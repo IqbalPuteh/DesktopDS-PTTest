@@ -957,7 +957,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
         {
             try
             {
-                Log.Information("Checking and deleting existing ZIP files...");
+                Log.Information("Checking data sharing files...");
                 //CheckAndDeleteZipFile(strDataSharingFolder);
                 var strDsPeriod = GetPrevYear() + GetPrevMonth();
 
@@ -970,10 +970,10 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 */
 
                 var path = appfolder + @"\Sales_Data.xls";
-                var path2 = uploadfolder + @"\ds-" + dtID + "-" + dtName + "-" + strDsPeriod + "_SALES.xlsx";
+                var path2 = uploadfolder + @"\ds-" + dtID + "-" + dtName + "-" + strDsPeriod + "_SALES.xls";
                 File.Move(path, path2, true);
                 path = appfolder + @"\Repayment_Data.xls";
-                path2 = uploadfolder + @"\ds-" + dtID + "-" + dtName + "-" + strDsPeriod + "_AR.xlsx";
+                path2 = uploadfolder + @"\ds-" + dtID + "-" + dtName + "-" + strDsPeriod + "_AR.xls";
                 File.Move(path, path2, true);
 
                 // set zipping name for files
@@ -996,8 +996,11 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 }
 
                 // Send Log file to the API server 
+                path = appfolder + Path.DirectorySeparatorChar + logfilename;
+                path2 = uploadfolder + Path.DirectorySeparatorChar + logfilename;
                 Log.Information("Sending log file to the API server...");
-                strStatusCode = SendReq(appfolder + Path.DirectorySeparatorChar + logfilename, issandbox, "Y");
+                File.Copy(path, path2, true);
+                strStatusCode = SendReq(path2, issandbox, "Y");
                 Thread.Sleep(5000);
             }
             catch (Exception ex)
