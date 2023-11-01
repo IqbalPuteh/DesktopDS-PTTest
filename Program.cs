@@ -1,16 +1,13 @@
 ﻿using System;
 using FlaUI.Core;
 using FlaUI.UIA3;
-using FlaUI.UIA2;
 using FlaUI.Core.Conditions;
 using FlaUI.Core.AutomationElements;
 using Serilog;
-using System.Threading;
 using System.Configuration;
 using System.Runtime.InteropServices;
 using System.IO.Compression;
 using System.Diagnostics.Eventing.Reader;
-using System.Windows.Documents;
 
 namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
 {
@@ -166,7 +163,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 }
                  Log.CloseAndFlush();
 
-                Task.Run(() => System.Windows.MessageBox.Show("Tejadi kesalahan, sliahkan tutup applikasi !!!"));
+                //Task.Run(() => System.Windows.MessageBox.Show("Tejadi kesalahan, sliahkan tutup applikasi !!!"));
             }
         }
 
