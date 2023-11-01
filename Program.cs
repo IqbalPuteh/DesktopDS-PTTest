@@ -21,6 +21,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
         static int step = 0;
         static string dtID = ConfigurationManager.AppSettings["dtID"];
         static string dtName = ConfigurationManager.AppSettings["dtName"];
+        static string appExe = ConfigurationManager.AppSettings["erpappnamepath"];
         static string LoginId = ConfigurationManager.AppSettings["loginId"];
         static string LoginPassword = ConfigurationManager.AppSettings["password"];
         static string enableconsolelog = ConfigurationManager.AppSettings["enableconsolelog"].ToUpper();
@@ -94,7 +95,7 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
                 Log.Information("Accurate Desktop ver.4 Automation -  by FAIRBANC");
 
 
-                if (!OpenDB())
+                if (!OpenAppAndDBConfig())
                 {
                     Log.Information("application automation failed !!");
                     return;
@@ -235,11 +236,11 @@ namespace DesktopDSPTTest // Note: actual namespace depends on the project name.
             }
         }
 
-        static bool OpenDB()
+        static bool OpenAppAndDBConfig()
         {
             try
             {
-                appx = Application.Launch(@"C:\Program Files (x86)\CPSSoft\ACCURATE4 Enterprise\Accurate.exe");
+                appx = Application.Launch(@$"{appExe}");
                 DesktopWindow = appx.GetMainWindow(automationUIA3);
 
                 // Wait until Accurate window ready
